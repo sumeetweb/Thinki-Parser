@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thinki-Parser</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+    <!-- Thinki Parser Header -->
+    <div class="flex flex-col items-center h-screen">
+        <h1 class="text-4xl font-bold">Thinki Parser</h1>
+        <p class="text-xl">A simple tool to parse Thinki-Downloader JSON files</p>
+        <div class="flex flex-col items-center justify-center">
+            <input type="file" id="jsonFileInput" accept=".json">
+            <button class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded" id="downloadBtn" hidden disabled>Download Modified JSON</button>
+            <div id="blocksContainer"></div>
+            <div id="selectOptions"></div>
+            <button class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded" id="downloadBtn2" hidden disabled>Download Modified JSON</button>
+        </div>
+        <br> <br>
+        <div class="flex flex-col items-center justify-center">
+            <p class="text-xl">Made with ❤️ for <a href="https://github.com/sumeetweb/Thinki-Downloader" target="_blank">Thinki-Downloader</a> by <a href="https://github.com/sumeetweb" target="_blank">Sumeet</a></p>
+        </div>
+    </div>
+
+    <script>
+        // On user selects a JSON file, parse it and display it
+        document.addEventListener('DOMContentLoaded', () => {
+            let mappedContentsAndChapters = null;
+            let jsonData = null;
+            let selectedOption = null;
+
+            const jsonFileInput = document.getElementById('jsonFileInput');
+            const blocksContainer = document.getElementById('blocksContainer');
+            const selectOptions = document.getElementById('selectOptions');
+            const downloadBtn = document.getElementById('downloadBtn');
+            const downloadBtn2 = document.getElementById('downloadBtn2');
+
+            jsonFileInput.addEventListener('change', handleFileChange);
+            // selectOptions.addEventListener('change', handleOptionChange);
+            downloadBtn.addEventListener('click', handleDownloadClick);
+            downloadBtn2.addEventListener('click', handleDownloadClick);
+
+            function handleFileChange(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+
+                reader.onload = function (e) {
+                    try {
+                        jsonData = JSON.parse(e.target.result);
+                        displayBlocks(jsonData);
+                        downloadBtn.disabled = false;
+                        downloadBtn.hidden = false;
+                        jsonFileInput.hidden = true;
+                        downloadBtn2.disabled = false;
+                        downloadBtn2.hidden = false;
+                    } catch (error) {
+                        alert('Error parsing JSON file. Please make sure it is valid JSON.');
+                    }
+                };
+
+                reader.readAsText(file);
+                jsonFileInput.value = ''; // Reset the input value to allow uploading the same file again
+            }
+
+            function handleDownloadClick() {
+                const contents = jsonData.contents;
+                const chapters = jsonData.chapters;
+                
+                // filter contents array based on selected items
+                const selectedItems = document.querySelectorAll('input[name="selected"]:checked');
+                const selectedItemsArray = Array.from(selectedItems);
+                const selectedItemsIds = selectedItemsArray.map((item) => item.id);
+                // console.log(selectedItemsIds);
+                const filteredContents = contents.filter((content) => selectedItemsIds.includes(String(content.id)))
+                // console.log(filteredContents);
+                jsonData.contents = filteredContents;
+
+                //filter chapters array based on selected items
+                const filteredChapters = chapters.filter((chapter) => {
+                    const contentsInChapter = filteredContents.filter((content) => content.chapter_id === chapter.id);
+                    return contentsInChapter.length > 0;
+                });
+                // console.log(filteredChapters);
+
+                // filter content ids inside chapters array
+                if(filteredChapters.length > 0) {
+                    filteredChapters.forEach((chapter) => {
+                        const contentsInChapter = filteredContents.filter((content) => content.chapter_id === chapter.id);
+                        chapter.content_ids = contentsInChapter.map((content) => content.id);
+                    });
+                }
+                // console.log(filteredChapters);
+
+                jsonData.chapters = filteredChapters;
+                jsonData.course.chapter_ids = filteredChapters.map((chapter) => chapter.id);
+                console.log(jsonData);
+                const data = JSON.stringify(jsonData, null, 2);
+                const blob = new Blob([data], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'modified_data.json';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }
+
+            // Display course details and each item inside contents array as a course item JSON data in blocks
+            function displayBlocks(jsonData) {
+                blocksContainer.innerHTML = '';
+                selectOptions.innerHTML = '';
+                const courseDetails = jsonData.course;
+                const contents = jsonData.contents;
+                const chapters = jsonData.chapters;
+                const courseDetailsBlock = document.createElement('div');
+                courseDetailsBlock.classList.add('jsonBlock');
+                courseDetailsBlock.innerHTML = `
+                    <h3 class="text-xl font-bold">Course Title: ${courseDetails.name}</h3>
+                `;
+                blocksContainer.appendChild(courseDetailsBlock);
+                let contentsBlock = document.createElement('div');
+                contentsBlock.classList.add('jsonBlock');
+                mappedContentsAndChapters = contents.map((content) => {
+                    const chapter = chapters.find((chapter) => chapter.id === content.chapter_id);
+                    return {
+                        content: content,
+                        chapter: chapter,
+                    };
+                });
+                
+                contentsBlock.innerHTML = `
+                    <h3 class="text-xl font-bold">Contents</h3>
+                    <ol class="list-decimal list-inside">
+                        ${mappedContentsAndChapters.map((single) =>
+                            `<input type="checkbox" id="${single.content.id}" name="selected" value="${single.content.id}" checked>
+                             <li>${single.chapter.name} - ${single.content.name}</li>`).join('')} 
+                    </ol>
+                    `;
+                blocksContainer.appendChild(contentsBlock);
+
+                // Display select options
+                const selectOptionsBlock = document.createElement('div');
+                selectOptionsBlock.classList.add('jsonBlock');
+                selectOptionsBlock.innerHTML = `
+                    <h3 class="text-xl font-bold">Select Options</h3>
+                    <select id="selectOptions">
+                        <option value="all">All</option>
+                        <option value="none">None</option>
+                    </select> <br> <br>
+                `;
+                selectOptions.appendChild(selectOptionsBlock);
+                const selectOptionsSelect = document.getElementById('selectOptions');
+                selectOptionsSelect.addEventListener('change', handleOptionChange);
+
+                function handleOptionChange(event) {
+                    const selectedOption = event.target.value;
+                    if (selectedOption === 'all') {
+                        const checkboxes = document.querySelectorAll('input[name="selected"]');
+                        checkboxes.forEach((checkbox) => {
+                            checkbox.checked = true;
+                        });
+                    } else if (selectedOption === 'none') {
+                        const checkboxes = document.querySelectorAll('input[name="selected"]');
+                        checkboxes.forEach((checkbox) => {
+                            checkbox.checked = false;
+                        });
+                    }
+                }
+                
+            }
+        });
+    </script>
+</body>
+</html>
